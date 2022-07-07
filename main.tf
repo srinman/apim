@@ -8,7 +8,7 @@ terraform {
 }
 provider "azurerm" {
     features {}
-    subscription_id = "bc288fdd-c41e-4334-961a-26e993d3c506"
+    subscription_id = "xyz"
     use_msi = true
 }
 

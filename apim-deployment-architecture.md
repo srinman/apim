@@ -225,98 +225,389 @@ Key Features:
 
 ## Premium V2 with Workspace Gateway
 
-### Workspace Gateway Architecture
+### Overview
 
-The Premium V2 tier introduces the ability to attach **workspace gateways**, enabling isolated API management for different teams, business units, or projects within a single APIM instance.
+The Premium V2 tier introduces the ability to attach **workspace gateways**, enabling isolated API management for different teams, business units, or projects within a single APIM instance. Workspaces provide logical isolation with dedicated gateway resources while sharing the underlying APIM infrastructure.
+
+### Workspace Gateway Association
+
+Workspace gateways are created and associated with workspaces through the following mechanisms:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                    PREMIUM V2 with WORKSPACE GATEWAY                                │
+│                    WORKSPACE GATEWAY ASSOCIATION OPTIONS                            │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 
+Option 1: Azure Portal
+├─► Navigate to APIM instance → Workspaces
+├─► Create new workspace
+├─► Select "Create workspace gateway"
+└─► Configure:
+    • Workspace name
+    • Gateway scaling units
+    • Custom domain (optional)
+    • Access policies
+
+Option 2: Azure CLI
+$ az apim workspace create \
+    --resource-group <rg-name> \
+    --service-name <apim-name> \
+    --workspace-id <workspace-id>
+
+$ az apim workspace gateway create \
+    --resource-group <rg-name> \
+    --service-name <apim-name> \
+    --workspace-id <workspace-id> \
+    --gateway-id <gateway-id>
+
+Option 3: ARM/Bicep Template
+resource workspace 'Microsoft.ApiManagement/service/workspaces@2023-05-01-preview' = {
+  parent: apimService
+  name: 'team-a-workspace'
+  properties: {
+    displayName: 'Team A Workspace'
+    description: 'Workspace for Product Team A'
+  }
+}
+
+resource workspaceGateway 'Microsoft.ApiManagement/service/workspaces/gateways@2023-05-01' = {
+  parent: workspace
+  name: 'team-a-gateway'
+  properties: {
+    locationData: {
+      name: 'Azure Region'
+    }
+  }
+}
+
+Option 4: Terraform
+resource "azurerm_api_management_workspace" "team_a" {
+  api_management_id = azurerm_api_management.main.id
+  name              = "team-a-workspace"
+  display_name      = "Team A Workspace"
+}
+
+resource "azurerm_api_management_workspace_gateway" "team_a_gateway" {
+  workspace_id = azurerm_api_management_workspace.team_a.id
+  name         = "team-a-gateway"
+  # Additional configuration
+}
+
+Option 5: REST API
+POST https://management.azure.com/subscriptions/{subscriptionId}/
+     resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/
+     service/{serviceName}/workspaces/{workspaceId}?api-version=2023-05-01-preview
+
+POST https://management.azure.com/subscriptions/{subscriptionId}/
+     resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/
+     service/{serviceName}/workspaces/{workspaceId}/gateways/{gatewayId}
+     ?api-version=2023-05-01-preview
+```
+
+### Architecture: Management Plane Operations
+
+This diagram shows how different actors configure and manage the APIM instance, workspaces, and gateways:
+
+```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                         APIM PREMIUM V2 INSTANCE                                    │
+│              MANAGEMENT PLANE - Configuration & Administration                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│ Platform Admin  │  │ Workspace Admin │  │ API Developer   │  │ DevOps Pipeline │
+│                 │  │ (Team A)        │  │                 │  │ (CI/CD)         │
+└────────┬────────┘  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘
+         │                    │                    │                    │
+         │                    │                    │                    │
+    [1]  │ Azure Portal       │                    │                    │
+         │ Azure CLI          │                    │                    │
+         │ ARM/Terraform      │                    │                    │
+         │                    │                    │                    │
+         ▼                    │                    │                    │
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                       AZURE MANAGEMENT APIs                                         │
+│         (Azure Resource Manager - management.azure.com)                             │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+         │                    │                    │                    │
+         │ [2] Creates/       │ [3] Manages        │ [4] Creates/       │ [5] Deploys
+         │     Configures     │     Workspace      │     Updates        │     APIs via
+         │     APIM Instance  │     Resources      │     APIs           │     IaC
+         │                    │                    │                    │
+         ▼                    ▼                    ▼                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                          APIM PREMIUM V2 INSTANCE                                   │
 │                                                                                     │
 │  ┌───────────────────────────────────────────────────────────────────────────────┐ │
 │  │                           MANAGEMENT PLANE                                    │ │
 │  │                                                                               │ │
-│  │  • Centralized Configuration                                                 │ │
-│  │  • Global Policies                                                           │ │
-│  │  • Identity & Access Management                                              │ │
-│  │  • Workspace Provisioning & Management                                       │ │
-│  │  • Cross-workspace Monitoring                                                │ │
+│  │  ┌─────────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  INSTANCE-LEVEL CONFIGURATION                                           │ │ │
+│  │  │                                                                         │ │ │
+│  │  │  Platform Admin manages:                                                │ │ │
+│  │  │  • APIM instance settings                                               │ │ │
+│  │  │  • Workspace creation/deletion                                          │ │ │
+│  │  │  • Gateway provisioning                                                 │ │ │
+│  │  │  • Global policies                                                      │ │ │
+│  │  │  • RBAC assignments                                                     │ │ │
+│  │  │  • Network configuration                                                │ │ │
+│  │  │  • Multi-region settings                                                │ │ │
+│  │  └─────────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                               │ │
+│  │  ┌─────────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  WORKSPACE 1: "Product Team A"                                          │ │ │
+│  │  │  ├─ Workspace Admin manages:                                            │ │ │
+│  │  │  │  • Workspace-scoped APIs                                             │ │ │
+│  │  │  │  • Workspace gateway scaling                                         │ │ │
+│  │  │  │  • Workspace policies                                                │ │ │
+│  │  │  │  • Workspace RBAC                                                    │ │ │
+│  │  │  │  • Backend configurations                                            │ │ │
+│  │  │  │                                                                      │ │ │
+│  │  │  └─ API Developer manages:                                              │ │ │
+│  │  │     • API definitions (OpenAPI)                                         │ │ │
+│  │  │     • API operations                                                    │ │ │
+│  │  │     • API policies                                                      │ │ │
+│  │  │     • Products & subscriptions                                          │ │ │
+│  │  └─────────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                               │ │
+│  │  ┌─────────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  WORKSPACE 2: "Product Team B"                                          │ │ │
+│  │  │  ├─ Workspace Admin manages:                                            │ │ │
+│  │  │  │  • Workspace-scoped APIs                                             │ │ │
+│  │  │  │  • Workspace gateway scaling                                         │ │ │
+│  │  │  │  • Workspace policies                                                │ │ │
+│  │  │  │  • Workspace RBAC                                                    │ │ │
+│  │  │  │                                                                      │ │ │
+│  │  │  └─ API Developer manages:                                              │ │ │
+│  │  │     • API definitions                                                   │ │ │
+│  │  │     • API operations & policies                                         │ │ │
+│  │  └─────────────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                               │ │
+│  │  ┌─────────────────────────────────────────────────────────────────────────┐ │ │
+│  │  │  WORKSPACE N: "Partner APIs"                                            │ │ │
+│  │  │  ├─ Workspace Admin manages:                                            │ │ │
+│  │  │  │  • Partner-facing APIs                                               │ │ │
+│  │  │  │  • Workspace gateway scaling                                         │ │ │
+│  │  │  │  • Partner access policies                                           │ │ │
+│  │  │  │                                                                      │ │ │
+│  │  │  └─ API Developer manages:                                              │ │ │
+│  │  │     • Partner API contracts                                             │ │ │
+│  │  │     • Integration configurations                                        │ │ │
+│  │  └─────────────────────────────────────────────────────────────────────────┘ │ │
 │  └───────────────────────────────────────────────────────────────────────────────┘ │
 │                                                                                     │
 │  ┌───────────────────────────────────────────────────────────────────────────────┐ │
 │  │                      DEVELOPER PORTAL (CENTRALIZED)                           │ │
 │  │                                                                               │ │
-│  │  • Unified API Catalog                                                       │ │
-│  │  • Cross-workspace API Discovery                                             │ │
-│  │  • Developer Self-service                                                    │ │
+│  │  Platform Admin configures:                                                  │ │
+│  │  • Portal branding & customization                                           │ │
+│  │  • Cross-workspace API visibility                                            │ │
+│  │  • Authentication providers                                                  │ │
+│  │                                                                               │ │
+│  │  Workspace Admins configure:                                                 │ │
+│  │  • Workspace API documentation                                               │ │
+│  │  • Products & subscription tiers                                             │ │
 │  └───────────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+[6] Configuration pushed to Data Plane
+         │
+         │ Automatic synchronization
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                         DATA PLANE / RUNTIME GATEWAYS                               │
+│                         (Configuration is READ-ONLY here)                           │
+│                                                                                     │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐                 │
+│  │ Primary Gateway  │  │ Workspace 1      │  │ Workspace N      │                 │
+│  │                  │  │ Gateway          │  │ Gateway          │                 │
+│  │ Receives config  │  │ Receives config  │  │ Receives config  │                 │
+│  │ for instance-    │  │ for workspace 1  │  │ for workspace N  │                 │
+│  │ level APIs       │  │ APIs only        │  │ APIs only        │                 │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘                 │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Architecture: Data Plane - API Traffic Flow
+
+This diagram shows how API calls flow through the gateways to backend services:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                  DATA PLANE - API Request/Response Flow                             │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Consumer A   │  │ Consumer B   │  │ Consumer C   │  │ Partner      │
+│ (External)   │  │ (Internal)   │  │ (Internal)   │  │ (External)   │
+└──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+       │                 │                 │                 │
+       │ HTTPS           │ HTTPS           │ HTTPS           │ HTTPS
+       │ API call        │ API call        │ API call        │ API call
+       │                 │                 │                 │
+       ▼                 ▼                 ▼                 ▼
+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                          APIM PREMIUM V2 INSTANCE                                   │
 │                                                                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐   │
 │  │                         DATA PLANE / RUNTIME                                │   │
 │  │                                                                             │   │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │   │
-│  │  │              PRIMARY GATEWAY (Instance-level)                        │  │   │
-│  │  │                                                                      │  │   │
-│  │  │  • Instance-wide APIs                                                │  │   │
-│  │  │  • Shared/Common APIs                                                │  │   │
-│  │  │  • Global endpoint: https://{service}.azure-api.net                 │  │   │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │   │
+│  │  ┌───────────────────────────────────────────────────────────────────────┐ │   │
+│  │  │  PRIMARY GATEWAY (Instance-level)                                     │ │   │
+│  │  │  Endpoint: https://{service}.azure-api.net                            │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  Handles: Instance-wide & shared APIs                                 │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  [Inbound]  ───────────────────────────────►  [Processing]            │ │   │
+│  │  │  • Authentication/Authorization                • Policy execution     │ │   │
+│  │  │  • API key validation                          • Request transform    │ │   │
+│  │  │  • JWT validation                              • Rate limiting        │ │   │
+│  │  │  • IP filtering                                • Caching              │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  [Outbound]  ◄───────────────────────────────  [Backend]              │ │   │
+│  │  │  • Response transform                          • Route to backend     │ │   │
+│  │  │  • Response caching                            • Load balancing       │ │   │
+│  │  │  • Logging/metrics                             • Circuit breaker      │ │   │
+│  │  └────────────────────────────────────┬───────────────────────────────────┘ │   │
+│  │                                       │                                     │   │
+│  │                                       │ Routes to shared backends           │   │
+│  │                                       ▼                                     │   │
+│  │                        ┌──────────────────────────┐                        │   │
+│  │                        │  Shared Backend Services │                        │   │
+│  │                        └──────────────────────────┘                        │   │
 │  │                                                                             │   │
-│  │  ┌──────────────────────────────────────────────────────────────────────┐  │   │
-│  │  │  WORKSPACE 1 GATEWAY                                                 │  │   │
-│  │  │                                                                      │  │   │
-│  │  │  Workspace: "Product Team A"                                        │  │   │
-│  │  │  • Isolated API definitions                                         │  │   │
-│  │  │  • Workspace-specific policies                                      │  │   │
-│  │  │  • Dedicated endpoint: https://{service}-workspace1.azure-api.net   │  │   │
-│  │  │  • Independent scaling units                                        │  │   │
-│  │  │  • Workspace-level RBAC                                             │  │   │
-│  │  │                                                                      │  │   │
-│  │  │  Connected Backends:                                                │  │   │
-│  │  │  └─ Team A microservices (AKS, App Service)                        │  │   │
-│  │  └──────────────────────┬───────────────────────────────────────────────┘  │   │
-│  │                         │                                                   │   │
-│  │  ┌──────────────────────▼───────────────────────────────────────────────┐  │   │
-│  │  │  WORKSPACE 2 GATEWAY                                                 │  │   │
-│  │  │                                                                      │  │   │
-│  │  │  Workspace: "Product Team B"                                        │  │   │
-│  │  │  • Isolated API definitions                                         │  │   │
-│  │  │  • Workspace-specific policies                                      │  │   │
-│  │  │  • Dedicated endpoint: https://{service}-workspace2.azure-api.net   │  │   │
-│  │  │  • Independent scaling units                                        │  │   │
-│  │  │  • Workspace-level RBAC                                             │  │   │
-│  │  │                                                                      │  │   │
-│  │  │  Connected Backends:                                                │  │   │
-│  │  │  └─ Team B services (Functions, Container Apps)                    │  │   │
-│  │  └──────────────────────┬───────────────────────────────────────────────┘  │   │
-│  │                         │                                                   │   │
-│  │  ┌──────────────────────▼───────────────────────────────────────────────┐  │   │
-│  │  │  WORKSPACE N GATEWAY                                                 │  │   │
-│  │  │                                                                      │  │   │
-│  │  │  Workspace: "Partner APIs"                                          │  │   │
-│  │  │  • Isolated API definitions                                         │  │   │
-│  │  │  • Workspace-specific policies                                      │  │   │
-│  │  │  • Dedicated endpoint: https://{service}-workspaceN.azure-api.net   │  │   │
-│  │  │  • Independent scaling units                                        │  │   │
-│  │  │  • Workspace-level RBAC                                             │  │   │
-│  │  │                                                                      │  │   │
-│  │  │  Connected Backends:                                                │  │   │
-│  │  │  └─ Partner integration services                                   │  │   │
-│  │  └──────────────────────────────────────────────────────────────────────┘  │   │
+│  │  ┌───────────────────────────────────────────────────────────────────────┐ │   │
+│  │  │  WORKSPACE 1 GATEWAY                                                  │ │   │
+│  │  │  Workspace: "Product Team A"                                          │ │   │
+│  │  │  Endpoint: https://{service}-workspace1.azure-api.net                 │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  Handles: ONLY Team A APIs                                            │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  [Inbound]  ───────────────────────────────►  [Processing]            │ │   │
+│  │  │  • Workspace-level auth                        • Workspace policies   │ │   │
+│  │  │  • Subscription validation                     • Team A transforms    │ │   │
+│  │  │  • Quota enforcement                            • Team A rate limits  │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  [Outbound]  ◄───────────────────────────────  [Backend]              │ │   │
+│  │  │  • Team A response policies                    • Team A backends      │ │   │
+│  │  │  • Workspace metrics                            • AKS cluster         │ │   │
+│  │  └────────────────────────────────────┬───────────────────────────────────┘ │   │
+│  │                                       │                                     │   │
+│  │                                       │ Routes to Team A backends           │   │
+│  │                                       ▼                                     │   │
+│  │                        ┌──────────────────────────┐                        │   │
+│  │                        │  Team A Backend Services │                        │   │
+│  │                        │  • Microservices (AKS)   │                        │   │
+│  │                        │  • App Services          │                        │   │
+│  │                        │  • Azure Functions       │                        │   │
+│  │                        └──────────────────────────┘                        │   │
+│  │                                                                             │   │
+│  │  ┌───────────────────────────────────────────────────────────────────────┐ │   │
+│  │  │  WORKSPACE 2 GATEWAY                                                  │ │   │
+│  │  │  Workspace: "Product Team B"                                          │ │   │
+│  │  │  Endpoint: https://{service}-workspace2.azure-api.net                 │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  Handles: ONLY Team B APIs                                            │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  [Inbound]  ───────────────────────────────►  [Processing]            │ │   │
+│  │  │  • Workspace-level auth                        • Workspace policies   │ │   │
+│  │  │  • Subscription validation                     • Team B transforms    │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  [Outbound]  ◄───────────────────────────────  [Backend]              │ │   │
+│  │  │  • Team B response policies                    • Team B backends      │ │   │
+│  │  └────────────────────────────────────┬───────────────────────────────────┘ │   │
+│  │                                       │                                     │   │
+│  │                                       │ Routes to Team B backends           │   │
+│  │                                       ▼                                     │   │
+│  │                        ┌──────────────────────────┐                        │   │
+│  │                        │  Team B Backend Services │                        │   │
+│  │                        │  • Container Apps        │                        │   │
+│  │                        │  • Azure Functions       │                        │   │
+│  │                        │  • Logic Apps            │                        │   │
+│  │                        └──────────────────────────┘                        │   │
+│  │                                                                             │   │
+│  │  ┌───────────────────────────────────────────────────────────────────────┐ │   │
+│  │  │  WORKSPACE N GATEWAY                                                  │ │   │
+│  │  │  Workspace: "Partner APIs"                                            │ │   │
+│  │  │  Endpoint: https://{service}-workspaceN.azure-api.net                 │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  Handles: ONLY Partner APIs                                           │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  [Inbound]  ───────────────────────────────►  [Processing]            │ │   │
+│  │  │  • Partner authentication                      • Partner policies     │ │   │
+│  │  │  • OAuth/API key validation                    • SLA enforcement      │ │   │
+│  │  │  • Throttling                                  • Contract validation  │ │   │
+│  │  │                                                                        │ │   │
+│  │  │  [Outbound]  ◄───────────────────────────────  [Backend]              │ │   │
+│  │  │  • Partner response format                     • Integration services │ │   │
+│  │  └────────────────────────────────────┬───────────────────────────────────┘ │   │
+│  │                                       │                                     │   │
+│  │                                       │ Routes to integration backends      │   │
+│  │                                       ▼                                     │   │
+│  │                        ┌──────────────────────────┐                        │   │
+│  │                        │  Partner Integration     │                        │   │
+│  │                        │  Backend Services        │                        │   │
+│  │                        │  • Integration APIs      │                        │   │
+│  │                        │  • Third-party connectors│                        │   │
+│  │                        └──────────────────────────┘                        │   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 
-Workspace Gateway Benefits:
-• Isolation: Each workspace has dedicated gateway resources
-• Scaling: Independent scaling per workspace based on demand
-• Governance: Workspace-level RBAC and policy management
-• Multi-tenancy: Support for multiple teams/business units
-• Billing: Potential for chargeback/showback per workspace
+KEY CHARACTERISTICS:
+
+1. ISOLATION: Each workspace gateway handles ONLY its workspace APIs
+   • No cross-workspace traffic
+   • Independent request processing
+   • Separate endpoint URLs
+
+2. INDEPENDENT SCALING: Each gateway scales independently
+   • Workspace 1: Can have 2 units
+   • Workspace 2: Can have 5 units
+   • Workspace N: Can have 1 unit
+
+3. POLICY ISOLATION: Policies are workspace-scoped
+   • Global policies apply to all
+   • Workspace policies apply only to that workspace
+   • API-level policies within workspace
+
+4. BACKEND ROUTING: Each workspace routes to its own backends
+   • No shared backend access across workspaces (unless explicitly configured)
+   • Workspace-specific network paths
+   • Independent circuit breakers and retry policies
+
+5. MONITORING: Separate telemetry per workspace
+   • Workspace-level metrics
+   • Independent Application Insights (optional)
+   • Per-workspace cost tracking
 ```
+
+### Workspace Gateway Benefits
+
+**Isolation:**
+- Each workspace has dedicated gateway resources
+- Complete API and configuration isolation
+- No cross-contamination of traffic or policies
+
+**Independent Scaling:**
+- Scale each workspace gateway based on its specific load
+- Different teams can have different capacity requirements
+- Cost optimization per team/business unit
+
+**Governance:**
+- Workspace-level RBAC and access control
+- Team-specific policy management
+- Delegated administration model
+
+**Multi-tenancy:**
+- Support for multiple teams, business units, or customers
+- Isolated environments within single APIM instance
+- Clear boundaries and ownership
+
+**Financial Management:**
+- Chargeback/showback capabilities per workspace
+- Track consumption and costs per team
+- Budget allocation and monitoring
 
 ---
 

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 540" font-family="Segoe UI, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f7a1f"/>
+    </marker>
+  </defs>
+
+  <text x="460" y="28" text-anchor="middle" font-size="18" font-weight="700">Internal path — resolves to VNet-injected NIC (10.10.1.4)</text>
+
+  <!-- VNet container -->
+  <rect x="20" y="60" width="430" height="450" rx="10" fill="#E8F1F9" stroke="#3a6ea5" stroke-width="2"/>
+  <text x="35" y="82" font-weight="700" fill="#234c75">apim-vnet-cus  (10.10.0.0/16)</text>
+  <text x="35" y="100" fill="#234c75" font-size="11">Private DNS zone "demos.srinman.com" (infrarg) linked here</text>
+
+  <!-- Client subnet -->
+  <rect x="40" y="120" width="180" height="100" rx="6" fill="#fff" stroke="#3a6ea5"/>
+  <text x="50" y="140" font-weight="600">aca-subnet (10.10.4.0/23)</text>
+  <rect x="55" y="150" width="150" height="55" rx="4" fill="#dbe9f5" stroke="#234c75"/>
+  <text x="130" y="172" text-anchor="middle" font-weight="700">shell-internal</text>
+  <text x="130" y="190" text-anchor="middle" font-size="11">curl https://apimprivate.demos.srinman.com</text>
+
+  <!-- APIM subnet -->
+  <rect x="240" y="120" width="190" height="100" rx="6" fill="#fff" stroke="#3a6ea5"/>
+  <text x="250" y="140" font-weight="600">apim-subnet (10.10.1.0/24)</text>
+  <rect x="255" y="150" width="160" height="55" rx="4" fill="#efe5f7" stroke="#5a2a82"/>
+  <text x="335" y="172" text-anchor="middle" font-weight="700">APIM injected NIC</text>
+  <text x="335" y="190" text-anchor="middle" font-size="11">10.10.1.4</text>
+
+  <!-- PE subnet (faded - not used here) -->
+  <rect x="240" y="240" width="190" height="60" rx="6" fill="#fff" stroke="#bbb" stroke-dasharray="4 3"/>
+  <text x="250" y="260" font-weight="600" fill="#888">pe-subnet (10.10.2.0/24)</text>
+  <rect x="255" y="265" width="160" height="28" rx="4" fill="#f1f1f1" stroke="#bbb"/>
+  <text x="335" y="284" text-anchor="middle" font-size="11" fill="#888">PE 10.10.2.4 (not used on this path)</text>
+
+  <!-- Step labels inside VNet -->
+  <text x="40" y="335" font-weight="700" fill="#234c75">Resolution sequence</text>
+  <text x="40" y="358" font-size="12">①  App resolves apimprivate.demos.srinman.com</text>
+  <text x="40" y="378" font-size="12">②  Query goes to Azure DNS 168.63.129.16</text>
+  <text x="40" y="398" font-size="12">③  Azure DNS looks up zones linked to THIS VNet</text>
+  <text x="40" y="418" font-size="12">④  Returns A → 10.10.1.4 (from infrarg zone)</text>
+  <text x="40" y="438" font-size="12">⑤  App opens TCP 443 to 10.10.1.4 via system route</text>
+  <text x="40" y="458" font-size="12">⑥  APIM serves TLS cert + responds (HTTP 200)</text>
+
+  <!-- Azure DNS resolver -->
+  <rect x="500" y="120" width="200" height="90" rx="8" fill="#FFF2E0" stroke="#c87f12" stroke-width="2"/>
+  <text x="600" y="142" text-anchor="middle" font-weight="700" fill="#7a4a00">Azure-provided DNS</text>
+  <text x="600" y="162" text-anchor="middle" font-size="12">168.63.129.16</text>
+  <text x="600" y="180" text-anchor="middle" font-size="11">(Wireserver / recursive resolver)</text>
+  <text x="600" y="198" text-anchor="middle" font-size="11">Checks zones linked to caller VNet</text>
+
+  <!-- Zone lookup -->
+  <rect x="740" y="120" width="160" height="120" rx="8" fill="#FFE9C7" stroke="#c87f12"/>
+  <text x="820" y="142" text-anchor="middle" font-weight="700" fill="#7a4a00">Private DNS zone</text>
+  <text x="820" y="160" text-anchor="middle" font-size="11">demos.srinman.com</text>
+  <text x="820" y="176" text-anchor="middle" font-size="11">RG = infrarg</text>
+  <line x1="755" y1="186" x2="885" y2="186" stroke="#c87f12"/>
+  <text x="820" y="204" text-anchor="middle" font-size="11" font-weight="600">A apimprivate</text>
+  <text x="820" y="222" text-anchor="middle" font-size="11">→ 10.10.1.4</text>
+
+  <!-- Result box -->
+  <rect x="500" y="380" width="400" height="100" rx="8" fill="#E5F5E5" stroke="#1f7a1f" stroke-width="2"/>
+  <text x="700" y="404" text-anchor="middle" font-weight="700" fill="#0d4a0d">Result</text>
+  <text x="700" y="426" text-anchor="middle" font-size="12">apimprivate.demos.srinman.com → 10.10.1.4</text>
+  <text x="700" y="445" text-anchor="middle" font-size="12">Direct VNet routing to APIM injected NIC</text>
+  <text x="700" y="464" text-anchor="middle" font-size="12" fill="#0d4a0d" font-weight="600">NO Private Endpoint traversal</text>
+
+  <!-- Arrows: client → DNS -->
+  <path d="M225 175 Q 360 80 500 150" fill="none" stroke="#444" stroke-width="1.6" marker-end="url(#arr)"/>
+  <text x="365" y="100" font-size="11" fill="#444">① query</text>
+
+  <!-- DNS → zone -->
+  <path d="M700 165 L740 165" fill="none" stroke="#444" stroke-width="1.6" marker-end="url(#arr)"/>
+  <text x="715" y="158" font-size="11" fill="#444">③ lookup</text>
+
+  <!-- zone → DNS (return) -->
+  <path d="M740 195 L700 195" fill="none" stroke="#444" stroke-width="1.6" marker-end="url(#arr)"/>
+  <text x="711" y="212" font-size="11" fill="#444">A record</text>
+
+  <!-- DNS → client (answer) -->
+  <path d="M500 200 Q 360 280 225 205" fill="none" stroke="#444" stroke-width="1.6" marker-end="url(#arr)"/>
+  <text x="350" y="265" font-size="11" fill="#444">④ 10.10.1.4</text>
+
+  <!-- client → APIM injected NIC -->
+  <path d="M210 178 L255 178" fill="none" stroke="#1f7a1f" stroke-width="2.2" marker-end="url(#arrG)"/>
+  <text x="218" y="170" font-size="11" font-weight="600" fill="#1f7a1f">⑤ TCP 443</text>
+</svg>
